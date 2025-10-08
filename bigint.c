@@ -1,80 +1,73 @@
-//#include "bigint.h"
+  /* Hugo Freires 2321223 3WA */
+  /* Saulo Canto 2320940 3WB */
+
+#include "bigint.h"
 #include <stdio.h>
+#include "string.h"
 
-#define NUM_BITS 128
-typedef unsigned char BigInt[NUM_BITS/8];
-
+/* res = val (extensão de sinal para 128 bits) */
 void big_val (BigInt res, long val){
-    
-    for (int i = 0; i < sizeof(BigInt); i++) {  // zera o vetor resultado
+    /* zera os 16 bytes do resultado (evita lixo nos bytes altos) */
+    for (int i = 0; i < (int)sizeof(BigInt); i++) {
         res[i] = 0;
     }
 
-    int neg = (val < 0);    // 1 se o numero é negativo, 0 se é positivo
+    int neg = (val < 0);    // 1 se o número é negativo, 0 se é positivo
 
-    unsigned long temp = (unsigned long)val; // cria uma variável temporaria pra n mexer em val
-    unsigned char parte = 0;    // variavel que representa o ultimo byte de temp
+    unsigned long temp = (unsigned long)val; // copia o valor passado como parâmetro para temp
+    unsigned char parte = 0;                  // guarda o byte menos significativo
 
-    for (int i = 0; i < (int)sizeof(long); i++) {
-        parte = (unsigned char)(temp & 0xFF);    //pega o ultimo byte da variável
-        res[i] = parte; //coloca no resultado o último byte de temp
-        temp = temp>>8; //"incrementa" temp
+    for (int i = 0; i < (int)sizeof(long); i++) {   //salva os bytes no modelo little-endian
+        parte = (unsigned char)(temp & 0xFF);  // pega o byte menos significativo
+        res[i] = parte;                        // grava o byte menos significativo no BigInt
+        temp = temp >> 8;                      // avança para o próximo byte
     }
 
-    if (neg == 0){
-        return; // se for positivo, mantém os bytes mais significativos zerados
+    if (neg == 0){  //se for positivo, a extensão de sinal é 0x00, que acontece quando o vetor resultado é zerado no inicio do código
+        return;
     }
 
-    for (int i = (int)sizeof(long); i < (int)sizeof(BigInt); i++) { // se for negativo, passa os útimos bytes para 0xFF
+    for (int i = (int)sizeof(long); i < (int)sizeof(BigInt); i++) { //se negativo, extensão de sinal com 0xFF nos bytes mais significativos 
         res[i] = 0xFF;
     }
 }
 
+/* res = -a  (complemento de 2: ~a + 1) */
 void big_comp2(BigInt res, BigInt a){
-    for (int i = 0; i < (int)sizeof(BigInt); i++) {  // zera o vetor resultado
-        res[i] = 0;
-    }
 
-    unsigned int carry = 1; // inicia em 1 pois complemento de 2 = (~a) + 1
+    unsigned int carry = 1; // inicia em 1 por causa do "+1" do complemento de 2
 
     for (int i = 0; i < (int)sizeof(BigInt); i++) {
-        unsigned int inv = (unsigned int)(~a[i]) & 0xFF;  // usa o operador ~, por isso, faz as conversões necessárias para int e "& 0xFF" para pegar apenas o byte necessario
-
-        unsigned int soma = inv + carry;
-
-        res[i] = (unsigned char)(soma & 0xFF); // pega apenas o byte relevante da soma
-
-        carry = soma >> 8;
+        unsigned int inv = (unsigned int)(~a[i]) & 0xFF;  // inverte os bits do byte atual
+        unsigned int soma = inv + carry;                  // soma +1 (e possíveis vai-uns)
+        res[i] = (unsigned char)(soma & 0xFF);            // guarda só o byte atual
+        carry = soma >> 8;                                // carry (vai-um) para o próximo byte o que não foi salvo
     }
 }
 
+/* res = a + b (módulo 2^128) */
 void big_sum (BigInt res, BigInt a, BigInt b) {
-    for (int i = 0; i < (int)sizeof(BigInt); i++) {
-        res[i] = 0;
-    }
 
-    unsigned int carry = 0;
+    unsigned int carry = 0; 
 
     for (int i = 0; i < (int)sizeof(BigInt); i++) {
-        unsigned int soma = (unsigned int)a[i] + (unsigned int)b[i] + carry;
-        res[i] = (unsigned char)(soma & 0xFF);
-        carry = soma >> 8;
+        unsigned int soma = (unsigned int)a[i] + (unsigned int)b[i] + carry; // soma byte a byte + carry anterior
+        res[i] = (unsigned char)(soma & 0xFF); // guarda só o byte menos significativo da soma
+        carry = soma >> 8;                     // transbordo da soma vira carry pro próximo byte
     }
 }
 
+/* res = a - b (implementação por borrow) */
 void big_sub (BigInt res, BigInt a, BigInt b) {
-    for (int i = 0; i < (int)sizeof(BigInt); i++) {
-        res[i] = 0;
-    }
 
-    unsigned int prox = 0;
+    unsigned int prox = 0; //sinalizar "pegar emprestado" do próximo byte
 
     for (int i = 0; i < (int)sizeof(BigInt); i++) {
         int sub = (int)a[i] - (int)b[i] - (int)prox;
 
         if (sub < 0) {
-            sub += 256;
-            prox = 1;
+            sub += 256; // empresta 1 byte (2^8)
+            prox = 1;   // sinaliza borrow pro próximo
         } else {
             prox = 0;
         }
@@ -83,91 +76,153 @@ void big_sub (BigInt res, BigInt a, BigInt b) {
     }
 }
 
-void big_shl (BigInt res, BigInt a, int n){
-    for (int i = 0; i < (int)sizeof(BigInt); i++) {
-        res[i] = 0;
+/* res = a << n (deslocamento lógico à esquerda) */
+void big_shl (BigInt res, BigInt a, int n) {
+    if (n <= 0) {   //caso base, se n<0, não há deslocamento, copia 'a' para 'res'*/
+        if (res != a) memcpy(res, a, sizeof(BigInt));
+        return;
+    }
+    if (n >= 8 * (int)sizeof(BigInt)) { // se deslocamento é maior que o numero de bits, o número é todo zerado
+        for (int i = 0; i < (int)sizeof(BigInt); i++) res[i] = 0;
+        return;
     }
 
+    int byte_shift = n / 8; //deslocamento de bytes
+    int bit_shift  = n % 8; //deslocamento de bits
+
+    BigInt tmp;
+
+    for (int i = 0; i < (int)sizeof(BigInt); i++) {
+        int src = i - byte_shift;
+        tmp[i] = (src >= 0 && src < (int)sizeof(BigInt)) ? a[src] : 0x00; //tmp[i] recebe a[i - byte_shift], mas se a[src] esta fora do range, recebe 0
+    }
+
+    if (bit_shift != 0) {
+        unsigned int carry = 0;
+        for (int i = 0; i < (int)sizeof(BigInt); i++) {
+            unsigned int v = ((unsigned int)tmp[i] << bit_shift) | carry; //desloca temp[i] o número necessários de bits
+            tmp[i] = (unsigned char)(v & 0xFF); //pega apeans o byte menos significativo
+            carry  = v >> 8;  //transborda para o próximo byte
+        }
+    }
+
+    memcpy(res, tmp, sizeof(BigInt)); //copia 'temp' para 'res'
+}
+
+
+/* res = a >> n (lógico) */
+void big_shr (BigInt res, BigInt a, int n) {
+    /* casos triviais */
     if (n <= 0) {
-        for (int i = 0; i < (int)sizeof(BigInt); i++){
-            res[i] = a[i];
-        } 
+        memcpy(res, a, sizeof(BigInt));
         return;
     }
     if (n >= 8 * (int)sizeof(BigInt)) {
+        /* deslocou >= 128 bits → vira 0 */
+        for (int i = 0; i < (int)sizeof(BigInt); i++) res[i] = 0;
+        return;
+    }
+
+    /* separamos n em deslocamento de bytes e de bits */
+    int byte_shift = n / 8;   /* quantos bytes inteiros mover */
+    int bit_shift  = n % 8;   /* quantos bits dentro do byte */
+
+    BigInt tmp;
+
+    /* 1) desloca por BYTES para a direita:
+          byte i de tmp vem do byte (i + byte_shift) de a
+          se estourar, entra 0 (lógico) */
+    for (int i = 0; i < (int)sizeof(BigInt); i++) {
+        int src = i + byte_shift;
+        tmp[i] = (src < (int)sizeof(BigInt)) ? a[src] : 0x00;
+    }
+
+    /* 2) desloca por BITS dentro dos bytes:
+          varre do topo (MSB) para a base (LSB),
+          carregando para o byte menor os bits que cairam do byte maior */
+    if (bit_shift != 0) {
+        unsigned int carry = 0; /* bits baixos do byte anterior */
+        for (int i = (int)sizeof(BigInt) - 1; i >= 0; i--) {
+            unsigned int v = ((unsigned int)tmp[i] >> bit_shift) | (carry << (8 - bit_shift));
+            carry = tmp[i] & ((1u << bit_shift) - 1u); /* guarda os bits que sobraram */
+            tmp[i] = (unsigned char)(v & 0xFF);
+        }
+    }
+
+    /* 3) copia para o resultado (seguro mesmo se res == a) */
+    memcpy(res, tmp, sizeof(BigInt));
+}
+
+
+/* res = a >> n (aritmético: preserva o sinal) */
+void big_sar (BigInt res, BigInt a, int n) {
+    /* casos triviais */
+    if (n <= 0) {
+        memcpy(res, a, sizeof(BigInt));
+        return;
+    }
+
+    /* descobre o bit de sinal original (bit mais significativo do último byte) */
+    unsigned char sign = (a[(int)sizeof(BigInt) - 1] & 0x80) ? 0xFF : 0x00;
+
+    if (n >= 8 * (int)sizeof(BigInt)) {
+        /* deslocou >= 128 bits → tudo vira sinal */
+        for (int i = 0; i < (int)sizeof(BigInt); i++) res[i] = sign;
         return;
     }
 
     int byte_shift = n / 8;
     int bit_shift  = n % 8;
 
+    BigInt tmp;
 
-    int dif = byte_shift; // deslocamento em bytes
+    /* 1) desloca por BYTES para a direita:
+          byte i de tmp vem de a[i + byte_shift]
+          se estourar, entra 'sign' (replicação do bit de sinal) */
     for (int i = 0; i < (int)sizeof(BigInt); i++) {
-        int src = i - dif; // índice da origem no vetor 'a'
-
-        if (src >= 0 && src < (int)sizeof(BigInt)) {
-            res[i] = a[src];   // copia o byte deslocado
-        } else {
-            res[i] = 0;        // bytes "novos" entram como 0
-        }
+        int src = i + byte_shift;
+        tmp[i] = (src < (int)sizeof(BigInt)) ? a[src] : sign;
     }
 
+    /* 2) desloca por BITS dentro dos bytes:
+          varre do MSB para o LSB,
+          com carry inicial "cheio" (111..1) se o número é negativo,
+          para injetar 1s pela esquerda; senão carry = 0 */
     if (bit_shift != 0) {
-        unsigned int carry = 0;
-        for (int i = 0; i < (int)sizeof(BigInt); i++) {
-            unsigned int v = ((unsigned int)res[i] << bit_shift) | carry;
-            res[i] = (unsigned char)(v & 0xFF);
-            carry  = v >> 8;  // transborda pro próximo byte
+        unsigned int carry = (sign == 0xFF) ? ((1u << bit_shift) - 1u) : 0u;
+        for (int i = (int)sizeof(BigInt) - 1; i >= 0; i--) {
+            unsigned int v = ((unsigned int)tmp[i] >> bit_shift) | (carry << (8 - bit_shift));
+            carry = tmp[i] & ((1u << bit_shift) - 1u);
+            tmp[i] = (unsigned char)(v & 0xFF);
         }
     }
 
+    memcpy(res, tmp, sizeof(BigInt));
 }
 
-int main(void){
+/* res = a * b (módulo 2^128) via shift-and-add */
+void big_mul (BigInt res, BigInt a, BigInt b) {
+    BigInt acc; // acumulador do resultado parcial
+    for (int i = 0; i < (int)sizeof(BigInt); i++) acc[i] = 0; // <-- cast para (int)
 
-    BigInt res = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-    long val = -2;
+    BigInt sh;  // "versão deslocada" de a, que anda 1 bit a cada passo
+    memcpy(sh, a, sizeof(BigInt));
 
-    big_val(res,val);
-
-    for(int i = 0;i<sizeof(BigInt);i++){
-        printf(" {0x%02X} , ", (unsigned char)res[i]);
+    // percorre cada um dos 128 bits de b (varrendo por bytes, e dentro de cada byte, por bits)
+    for (int byte = 0; byte < (int)sizeof(BigInt); byte++) { // <-- cast para (int)
+        unsigned char bj = b[byte]; // byte atual de b (8 bits)
+        for (int bit = 0; bit < 8; bit++) {
+            if (bj & 1) {          // se o bit atual de b é 1
+                BigInt temp;       // soma o parcial: acc += sh
+                big_sum(temp, acc, sh);
+                memcpy(acc, temp, sizeof(BigInt));
+            }
+            BigInt temp2;
+            big_shl(temp2, sh, 1); // sh <<= 1 (prepara para o próximo bit)
+            memcpy(sh, temp2, sizeof(BigInt));
+            bj >>= 1;              // avança para o próximo bit do byte bj
+        }
     }
-    printf("\n");
 
-    BigInt a, b;
-    big_val(a, -6);
-    big_comp2(res,a);
-
-    for(int i = 0;i<sizeof(BigInt);i++){
-        printf(" {0x%02X} , ", (unsigned char)res[i]);
-    }
-    printf("\n");
-
-    big_val(b, -5);
-    big_sum(res,a,b);
-
-    for(int i = 0;i<sizeof(BigInt);i++){
-        printf(" {0x%02X} , ", (unsigned char)res[i]);
-    }
-    printf("\n");
-
-    big_val(a, 5);
-    big_val(b, -5);
-    big_sub(res,a,b);
-
-    for(int i = 0;i<sizeof(BigInt);i++){
-        printf(" {0x%02X} , ", (unsigned char)res[i]);
-    }
-    printf("\n");
-
-    big_val(a, 5);
-    big_shl(res,a,32);
-
-    for(int i = 0;i<sizeof(BigInt);i++){
-        printf(" {0x%02X} , ", (unsigned char)res[i]);
-    }
-    printf("\n");
-
+    memcpy(res, acc, sizeof(BigInt)); // resultado final
 }
