@@ -171,40 +171,54 @@ void big_shr (BigInt res, BigInt a, int n) {
 }
 
 
-// res = a >> n
+// res = a >> n (shift aritmético à direita)
 void big_sar (BigInt res, BigInt a, int n) {
-    // logica geral muito similar a de big_shr
+
+    // se não for pra shiftar, só copia
     if (n <= 0) {
         memcpy(res, a, sizeof(BigInt));
         return;
     }
 
-    unsigned char sign = (a[(int)sizeof(BigInt) - 1] & 0x80) ? 0xFF : 0x00; // descobre o bit de sinal original
+    // pega o bit de sinal (MSB do último byte)
+    // se for 1, o número é negativo → preenche com 0xFF
+    unsigned char sign = (a[(int)sizeof(BigInt) - 1] & 0x80) ? 0xFF : 0x00;
 
+    // se deslocar 128 bits ou mais, o número "some"
+    // o resultado é só o sinal repetido em todos os bytes
     if (n >= 8 * (int)sizeof(BigInt)) {
-        for (int i = 0; i < (int)sizeof(BigInt); i++) res[i] = sign;
+        for (int i = 0; i < (int)sizeof(BigInt); i++)
+            res[i] = sign;
         return;
     }
 
+    // separa o deslocamento em bytes e bits
     int byte_shift = n / 8;
     int bit_shift  = n % 8;
 
-    BigInt tmp;
+    BigInt tmp; // buffer temporário pra poder fazer in-place sem bagunça
 
+    // 1) desloca os bytes pra direita
+    // se passar do limite, entra o "sign" (0x00 ou 0xFF)
     for (int i = 0; i < (int)sizeof(BigInt); i++) {
         int src = i + byte_shift;
         tmp[i] = (src < (int)sizeof(BigInt)) ? a[src] : sign;
     }
 
+    // 2) desloca os bits dentro de cada byte
+    // e carrega os bits "que caem" pro próximo byte
     if (bit_shift != 0) {
+        // se o número for negativo, o carry inicial é cheio de 1s
         unsigned int carry = (sign == 0xFF) ? ((1u << bit_shift) - 1u) : 0u;
+
         for (int i = (int)sizeof(BigInt) - 1; i >= 0; i--) {
             unsigned int v = ((unsigned int)tmp[i] >> bit_shift) | (carry << (8 - bit_shift));
-            carry = tmp[i] & ((1u << bit_shift) - 1u);
+            carry = tmp[i] & ((1u << bit_shift) - 1u); // guarda os bits que "caíram"
             tmp[i] = (unsigned char)(v & 0xFF);
         }
     }
 
+    // copia o resultado final
     memcpy(res, tmp, sizeof(BigInt));
 }
 
