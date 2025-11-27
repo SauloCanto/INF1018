@@ -1,0 +1,50 @@
+#!/bin/bash
+
+echo "=== Testando todas as funções ==="
+echo ""
+
+echo "Função 0: ret \$100"
+echo "  Esperado: 100"
+./teste test_f0.txt 0 | grep "Resultado:"
+echo ""
+
+echo "Função 1: ret p0"
+echo "  Com argumento 5 (esperado: 5):"
+./teste test_f1.txt 5 | grep "Resultado:"
+echo "  Com argumento 10 (esperado: 10):"
+./teste test_f1.txt 10 | grep "Resultado:"
+echo ""
+
+echo "Função 2: v0 = p0 + \$1; ret v0"
+echo "  Com argumento 5 (esperado: 6):"
+./teste test_f2.txt 5 | grep "Resultado:"
+echo "  Com argumento 10 (esperado: 11):"
+./teste test_f2.txt 10 | grep "Resultado:"
+echo ""
+
+echo "Função 3: v0 = p0 + \$0; v1 = v0 - \$1; ret v1"
+echo "  Com argumento 5 (esperado: 4):"
+./teste test_f3.txt 5 | grep "Resultado:"
+echo "  Com argumento 10 (esperado: 9):"
+./teste test_f3.txt 10 | grep "Resultado:"
+echo ""
+
+echo "Função 4: v0 = \$10 + \$5; v1 = v0 - \$3; v2 = v1 * \$2; ret v2"
+echo "  Esperado: 24 (independente do argumento)"
+./teste test_f4.txt 0 | grep "Resultado:"
+echo ""
+
+echo "Função 5: v0 = p0 + \$1; v1 = p0 - \$1; v2 = v0 * v1; ret v2"
+echo "  Calcula (p0+1)*(p0-1) = p0²-1"
+echo "  Com argumento 5 (esperado: 24):"
+./teste test_f5.txt 5 | grep "Resultado:"
+echo "  Com argumento 10 (esperado: 99):"
+./teste test_f5.txt 10 | grep "Resultado:"
+echo ""
+
+echo "Função 6: v0 = p0 * \$3; v1 = v0 + \$10; ret v1"
+echo "  Calcula p0*3+10"
+echo "  Com argumento 5 (esperado: 25):"
+./teste test_f6.txt 5 | grep "Resultado:"
+echo "  Com argumento 10 (esperado: 40):"
+./teste test_f6.txt 10 | grep "Resultado:"

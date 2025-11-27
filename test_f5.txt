@@ -1,0 +1,6 @@
+function
+v0 = p0 + $1
+v1 = p0 - $1
+v2 = v0 * v1
+ret v2
+end
